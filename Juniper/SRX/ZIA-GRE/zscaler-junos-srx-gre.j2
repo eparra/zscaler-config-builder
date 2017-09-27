@@ -1,0 +1,298 @@
+system {
+    host-name {{ hostname }};
+    time-zone {{ timezone }};
+    internet-options {
+        path-mtu-discovery;
+        gre-path-mtu-discovery;
+        tcp-mss 1436;
+    }
+    ports {
+        console log-out-on-disconnect;
+    }
+    name-server {
+        {{ dns1 }};
+        {{ dns2 }};
+    }
+    services {
+        ssh {
+            protocol-version v2;
+        }
+    }
+    syslog {
+        archive size 100k files 3;
+        user * {
+            any emergency;
+        }
+        file messages {
+            any critical;
+            authorization info;
+        }
+        file interactive-commands {
+            interactive-commands error;
+        }
+        file firewall {
+            firewall any;
+        }
+    }
+    max-configurations-on-flash 20;
+    max-configuration-rollbacks 20;
+    license {
+        autoupdate {
+            url https://ae1.juniper.net/junos/key_retrieval;
+        }
+    }
+    ntp {
+        server {{ ntp1 }} prefer;
+        server {{ ntp2 }};
+        server {{ ntp3 }};
+    }
+}
+interfaces {
+    ge-0/0/0 {
+        description "ISP Terminiating Interface (ZONE: untrust)";
+        unit 0 {
+            family inet {
+                address {{ untrust_ip }}/{{ untrust_mask }};
+            }
+        }
+    }
+    gr-0/0/0 {
+        unit 0 {
+            description "Primary Tunnel to Zscaler (ZONE: zscaler)";
+            tunnel {
+                source {{ untrust_ip }};
+                destination {{ pri_zen_gre_dest }};
+                path-mtu-discovery;
+            }
+            family inet {
+                mtu 1476;
+                address {{ pri_int_router_ip }}/30;
+            }
+        }
+        unit 1 {
+            description "Secondary Tunnel to Zscaler (ZONE: zscaler)";
+            tunnel {
+                source {{ untrust_ip }};
+                destination {{ sec_zen_gre_dest }};
+                path-mtu-discovery;
+            }
+            family inet {
+                mtu 1476;
+                address {{ sec_int_router_ip }}/30;
+            }
+        }
+    }
+    ge-0/0/1 {
+        unit 0 {
+            family inet {
+                filter {
+                    input FBF-ZSCALER;
+                }
+                address {{ trust_ip }}/{{ trust_mask }};
+            }
+        }
+    }
+}
+routing-options {
+    interface-routes {
+        rib-group inet FBF-ZSCALER;
+    }
+    static {
+        route 0.0.0.0/0 {
+            next-hop {{ untrust_gw }};
+            retain;
+        }
+    }
+    rib-groups {
+        FBF-ZSCALER {
+            import-rib [ inet.0 ZSCALER.inet.0 ];
+        }
+    }
+}
+protocols {
+    oam {
+        gre-tunnel {
+            interface gr-0/0/0.0 {
+                keepalive-time 10;
+                hold-time 30;
+            }
+            interface gr-0/0/0.1 {
+                keepalive-time 10;
+                hold-time 30;
+            }
+        }
+    }
+}
+security {
+    address-book {
+        global {
+            address untrust-interface {{ trust_ip }}/32;
+            address Zscaler-ZEN-Primary {{ pri_zen_gre_dest }}/32;
+            address Zscaler-ZEN-Secondary {{ sec_zen_gre_dest }}/32;
+        }
+    }
+    forwarding-options {
+        family {
+            inet6 {
+                mode flow-based;
+            }
+        }
+    }    
+    flow {
+        tcp-mss {
+            gre-in {
+                mss 1436;
+            }
+            gre-out {
+                mss 1436;
+            }
+        }
+    }
+    screen {
+        ids-option untrust-screen {
+            icmp {
+                ping-death;
+            }
+            ip {
+                source-route-option;
+                tear-drop;
+            }
+            tcp {
+                syn-flood {
+                    alarm-threshold 1024;
+                    attack-threshold 200;
+                    source-threshold 1024;
+                    destination-threshold 2048;
+                    timeout 20;
+                }
+                land;
+            }
+        }
+    }
+    policies {
+        from-zone trust to-zone untrust {
+            policy trust-to-untrust {
+                match {
+                    source-address any-ipv4;
+                    destination-address any-ipv4;
+                    application any;
+                }
+                then {
+                    permit;
+                }
+            }
+        }
+        from-zone trust to-zone zscaler {
+            policy trust-to-untrust {
+                match {
+                    source-address any-ipv4;
+                    destination-address any-ipv4;
+                    application any;
+                }
+                then {
+                    permit;
+                }
+            }
+        }
+        from-zone zscaler to-zone trust {
+            policy trust-to-untrust {
+                match {
+                    source-address any-ipv4;
+                    destination-address any-ipv4;
+                    application any;
+                }
+                then {
+                    permit;
+                }
+            }
+        }
+        from-zone untrust to-zone trust {
+            policy trust-to-untrust {
+                match {
+                    source-address any-ipv4;
+                    destination-address any-ipv4;
+                    application any;
+                }
+                then {
+                    deny;
+                }
+            }
+        }
+    }
+    zones {
+        security-zone trust {
+            host-inbound-traffic {
+                system-services {
+                    all;
+                }
+                protocols {
+                    all;
+                }
+            }
+            interfaces {
+                ge-0/0/1.0;
+            }
+        }
+        security-zone untrust {
+            tcp-rst;
+            screen untrust-screen;
+            host-inbound-traffic {
+                system-services {
+                    ping;
+                    traceroute;
+                }
+            }
+            interfaces {
+                ge-0/0/0.0;
+            }
+        }
+        security-zone zscaler {
+            host-inbound-traffic {
+                system-services {
+                    all;
+                }
+                protocols {
+                    all;
+                }
+            }
+            interfaces {
+                gr-0/0/0.0;
+                gr-0/0/0.1;
+            }
+        }
+    }
+}
+firewall {
+    family inet {
+        filter FBF-ZSCALER {
+            term ACCEPT-DIRECT-INTERFACE-TRAFFIC {
+                from {
+                    destination-address {
+                        {{ trust_ip }}/32;
+                    }
+                }
+                then accept;
+            }
+            term FBF-ALL-TO-ZSCALER {
+                then {
+                    routing-instance ZSCALER;
+                }
+            }
+        }
+    }
+}
+routing-instances {
+    ZSCALER {
+        instance-type forwarding;
+        routing-options {
+            static {
+                route 0.0.0.0/0 {
+                    next-hop gr-0/0/0.0;
+                    qualified-next-hop gr-0/0/0.1 {
+                        preference 6;
+                    }
+                }
+            }
+        }
+    }
+}
