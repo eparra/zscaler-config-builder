@@ -22,7 +22,7 @@ Installing from Git is also supported (OS must have git installed).
 
 **CLI Syntax**
 
-        ./zscaler-config-builder.py -I _<CSV FILE>_ -T _<JINJA TEMPLATE>_ 
+        ./zscaler-config-builder.py -I <CSV FILE> -T <JINJA TEMPLATE> 
         
 **Example**
 
