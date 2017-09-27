@@ -1,4 +1,4 @@
-# Zscaler Config Builder Overview
+# Zscaler Config Builder 
 
 _Zscaler Config Builder_ is a Python script for building CE/CPE device configs to support Zscaler Internet Access (ZIA).  The user is ***NOT*** required: (a) to be a "Software Programmer™", (b) have sophisticated knowledge of the operating systems this tool can build configurations for.  
 
