@@ -1,0 +1,2 @@
+hostname,timezone,dns1,dns2,ntp1,ntp2,ntp3,untrust_ip,untrust_mask,untrust_gw,trust_ip,trust_mask,pri_zen_gre_dest,pri_int_router_ip,pri_int_zen_ip,sec_zen_gre_dest,sec_int_router_ip,sec_int_zen_ip
+srx220-Zscaler-GW,America/Los_Angeles,8.8.8.8,8.8.4.4,129.6.15.29,209.133.217.165,204.27.56.163,50.34.3.72,29,50.34.4.177,192.168.100.5,24,199.168.148.131,172.17.7.1,172.17.7.2,104.129.194.38,172.17.7.5,172.17.7.6
